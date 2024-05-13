@@ -18,7 +18,7 @@ cfg_elec = dict(
 
 # change this dictionary for altering the sweep range
 cfg_sim = dict(
-    I = {'N': 2, 'start':0, 'end': 8, 'unit':'mA'},
-    r = {'N': 5 , 'start':1, 'end': 3, 'unit':'mm'},
-    k = {'N': 1, 'start':0, 'end': -100, 'unit':'1'}
+    I = {'N': 2, 'start':-10, 'end': 10, 'unit':'mA'},
+    r = {'N': 3 , 'start':1, 'end': 3, 'unit':'mm'},
+    k = {'N': 21, 'start':100, 'end': -100, 'unit':'1'}
 )

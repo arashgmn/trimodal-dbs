@@ -2,7 +2,7 @@ from brian2.units import meter
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.offsetbox import AnchoredOffsetbox
-from mpl_toolkits.axes_grid.inset_locator import (inset_axes, InsetPosition,
+from mpl_toolkits.axes_grid1.inset_locator import (inset_axes, InsetPosition,
                                                   mark_inset)
 
 from utils import *
@@ -112,39 +112,154 @@ def add_scalebar(ax, matchx=True, matchy=True, hidex=True, hidey=True, **kwargs)
 
     return sb   
 
-def plot(t, v, af, nrn, mon, spk, stim_dur_ms, biphasic, suffix, name):
-    fig, axs = plt.subplot_mosaic([['.', 'cb', '.'], ['af', 'sol','spk']],
-                    figsize=(10,5), 
-                    gridspec_kw={'width_ratios':[0.3, 1.0,.3],
+def plot(t, v, r, af, nrn, mon, spk, stim_dur, biphasic_ratio, suffix, name,
+         amp_scale=1300, amp_axis_loc=1500):
+    
+    dt = mon.t[1] - mon.t[0]
+    idx_start = 0# int(round((3-2.9)/0.01))+1
+    idx_counter = int(round(stim_dur/dt))
+    idx_end = int(round(stim_dur* (1+biphasic_ratio)/dt))
+
+    fig, axs = plt.subplot_mosaic([['geo', 'cb', '.'], ['af', 'sol','spk']],
+                    figsize=(9,5), 
+                    gridspec_kw={'width_ratios':[0.25, 1.0,.1],
                                 'height_ratios':[0.05,1]},
                     )
     
-    # plots
-    cb = axs['sol'].imshow(v, aspect='auto', origin='lower', 
-                            vmin=-0.4, vmax=0.4)
-    fig.colorbar(cb, cax = axs['cb'], orientation='horizontal',)
-    axs['spk'].plot(spk.count, nrn._indices())
-    axs['af'].plot(af, nrn._indices(),label='primamry', color='purple')
+    # geo
+    axs['geo'].plot(*r.__array__()[:2], marker='o', color='k', ms=4)
+    axs['geo'].plot(nrn.morphology.x.__array__(), 
+                    nrn.morphology.y.__array__(), 
+                    lw=5, color='gray', alpha=.5)
+
+    axs['geo'].scatter(nrn.morphology.x.__array__()[nrn.idx_nr], 
+                    nrn.morphology.y.__array__()[nrn.idx_nr], 
+                    zorder=99, marker='s', s=2,
+                    color=plt.cm.Spectral(np.linspace(0,1,len(nrn.idx_nr)))
+                    )
+    axs['geo'].set_aspect('equal')
+    axs['geo'].set_axis_off()
+    axs['geo'].margins(x=.05, y=.05)
+    # axs['geo'].set_xlim(axs['geo'].get_xlim(), adjustable='box', expand=True)
+    # axs['geo'].set_ylim(axs['geo'].get_ylim(), adjustable='box', expand=True)
+    # xlims = axs['geo'].get_xlim()
+    # ylims = axs['geo'].get_ylim()
+    # axs['geo'].set_xlim(xlims[0]*1.1, xlims[1]*1.1)
+    # axs['geo'].set_xlim(ylims[0]*1.1, ylims[1]*1.1)
+    
+    
+    # sol
+    sol = axs['sol'].imshow(v.__array__(), 
+                            vmin=-0.3-.083, vmax=0.3-.083, cmap='bwr', 
+                            aspect='auto', origin='lower', )
+
+    # cb
+    fig.colorbar(sol, cax = axs['cb'], orientation='horizontal', extend='both')
+    # cb = axs['sol'].imshow(v, aspect='auto', origin='lower', 
+    #                         vmin=-0.4, vmax=0.4)
+    
     
     # time bar indicators
-    idx_start = int(round((3-2.9)/0.01))+1
-    idx_counter = int(round((3+stim_dur_ms-2.9)/0.01))+1
-    idx_end = int(round((3+11*stim_dur_ms-2.9)/0.01))+1
+    # idx_start = int(round((3-2.9)/0.01))+1
+    # idx_counter = int(round((3+stim_dur_ms-2.9)/0.01))+1
+    # idx_end = int(round((3+11*stim_dur_ms-2.9)/0.01))+1
     
-    axs['sol'].plot([idx_start, idx_counter], [1000, 1000], 
-                    color='purple', linewidth=5)
-    # biphasic plots
-    if biphasic:
-        axs['af'].plot(-af/10., nrn._indices(), 
-                        label='counter', color='orange')
-        axs['sol'].plot([idx_counter, idx_end], [1000, 1000],
-                        color='orange', linewidth=5)
+    # psuedo axis for wavefrom:
+    # we scale the amplitdue of the pulse such that it maxes at
+    # 10. The amp=0 axis is fixed at y=1000
+    sign = np.sign(float(name.split('_i')[1].split(' A')[0]))
+    val = np.abs(float(name.split('_i')[1].split(' A')[0]))
 
+    # axis
+    axs['sol'].plot([idx_start, idx_end*1.15], [amp_axis_loc, amp_axis_loc], color='k', linewidth=0.5) # pseudo x-axis
+    # axs['sol'].plot([idx_start, idx_start],[amp_axis_loc, amp_axis_loc+amp_scale*1.5], color='k', linewidth=0.5)
+
+    # scale bar
+    axs['sol'].plot([idx_end*1.2, idx_end*1.2], [amp_axis_loc, amp_axis_loc + amp_scale], color='k', linewidth=3) # scale bar
+    axs['sol'].text(idx_end*1.21, amp_axis_loc, f'{val} A', color='k', rotation=90, fontsize=8, transform=axs['sol'].transData) # scale bar text
+
+    # waveform
+    axs['sol'].plot([idx_start, idx_start, idx_counter, idx_counter],
+                [amp_axis_loc, 
+                 amp_axis_loc+amp_scale*sign, 
+                 amp_axis_loc+amp_scale*sign,
+                 amp_axis_loc], 
+                color='k', linewidth=1)
+    
+    # pulse indicators
+    axs['sol'].plot([idx_start, idx_counter],[amp_axis_loc, amp_axis_loc], 
+                color='green', linewidth=2, alpha=0.5)
+    
+    # # axs['sol'].plot([idx_start, idx_end*1.15], [amp_axis_loc, amp_axis_loc], color='k', linewidth=0.5)
+    # # axs['sol'].plot([idx_start, idx_start],[amp_axis_loc, amp_axis_loc+amp_scale*1.5], color='k', linewidth=0.5)
+    
+    # axs['sol'].plot([idx_start*.8, idx_start*.8], 
+    #                 [amp_axis_loc, amp_axis_loc + amp_scale], 
+    #                 color='k', linewidth=3)
+    # # axs['sol'].text(0.6, 0.25, f'3-{val}', color='k', fontsize=12, transform=axs['sol'].transAxes)
+    # # axs['sol'].text(0.5, 0.15, f'4-{val}', color='k', fontsize=12, transform=axs['sol'].transAxes)
+    # axs['sol'].text(0.03, 0.13, f'{val}', color='k', rotation=90,
+    #                 fontsize=8, transform=axs['sol'].transAxes)
+    
+    
+    # axs['sol'].text(0.04, 0.25, r'$I_{elec}\ [A]$', color='k', 
+    #                 fontsize=10, fontfamily='sans', 
+    #                 transform=axs['sol'].transAxes)
+    
+    # # axs['sol'].text(0.02, 0.2*(), f'{val}', color='k', 
+    # #                 fontsize=8, fontfamily='sans', 
+    # #                 transform=axs['sol'].transAxes)
+        
+    # axs['sol'].plot([idx_start, idx_start, idx_counter, idx_counter],
+    #                 [amp_axis_loc, 
+    #                  amp_axis_loc+amp_scale*sign, 
+    #                  amp_axis_loc+amp_scale*sign,
+    #                  amp_axis_loc], 
+    #                 color='k', linewidth=1)
+    # axs['sol'].plot([idx_start, idx_counter],[amp_axis_loc, amp_axis_loc], 
+    #                 color='green', linewidth=2, alpha=0.5)
+    
+   
+    
+    # af
+    axs['af'].vlines(0, 0, len(nrn._indices()), ls=':', color='k', lw=1)
+    axs['af'].plot(af, nrn._indices(), label='primary', color='green')
+
+    # spikes
+    axs['spk'].plot(spk.count, nrn._indices())
+    
+    # biphasic plots
+    if biphasic_ratio:
+        # rest of waveform
+        axs['sol'].plot([idx_counter, idx_counter, idx_end, idx_end],
+                    [amp_axis_loc, 
+                    amp_axis_loc-amp_scale*sign/biphasic_ratio, 
+                    amp_axis_loc-amp_scale*sign/biphasic_ratio,
+                    amp_axis_loc], 
+                    color='k', linewidth=1)
+    
+        # pulse indicator
+        axs['sol'].plot([idx_counter, idx_end],[amp_axis_loc, amp_axis_loc], 
+                        color='purple', linewidth=2, alpha=0.5 )
+        
+        # counter pulse
+        axs['af'].plot(-af/biphasic_ratio, nrn._indices(), 
+                            label='counter', color='purple')
+        
+        
+    
     # y-axis
-    for id in ['af','spk']:
+    for id in ['af','spk', 'sol']:
         axs[id].set_ylim(nrn._indices()[0], nrn._indices()[-1])
-    for id in ['sol','spk']:
-        axs[id].set_yticklabels([])
+        axs[id].set_yticks(nrn.idx_nr, [])
+
+    axs['af'].set_yticks(nrn.idx_nr, [u'\u25A0' for _ in nrn.idx_nr], 
+                         fontname='STIXGeneral', fontsize=5)
+    [label.set_color(i) for (i, label) in 
+     zip(plt.cm.Spectral(np.linspace(0,1,len(nrn.idx_nr))), 
+        axs['af'].yaxis.get_ticklabels())
+     ]
+    
     axs['af'].set_ylabel('segment index')
 
     # x-axis
@@ -159,15 +274,19 @@ def plot(t, v, af, nrn, mon, spk, stim_dur_ms, biphasic, suffix, name):
 
     axs['cb'].xaxis.tick_top()
 
-    ticks_times = t[::int(.1*ms//b2.defaultclock.dt)]
-    ticks_idx = [i for i,_ in enumerate(t) if t[i] in ticks_times]
-    ticks_labels = [str(round(l,3)) for l in ticks_times] 
-    axs['sol'].set_xticks(ticks_idx)
-    axs['sol'].set_xticklabels(ticks_labels)
+    # ticks_times = t[::int(.1*ms//b2.defaultclock.dt)]
+    # ticks_idx = [i for i,_ in enumerate(t) if t[i] in ticks_times]
+    # ticks_labels = [str(round(l,3)) for l in ticks_times] 
+    # axs['sol'].set_xticks(ticks_idx)
+    # axs['sol'].set_xticklabels(ticks_labels)
+    
+    tidx = np.linspace(0, len(t) - 1, 17, dtype=int)
+    axs['sol'].set_xticks(tidx, np.round(t.__array__(), 2)[tidx])
+    # axs['sol'].set_xticklabels(ticks_labels)
     axs['sol'].set_xlabel('Time [ms]')
 
     # titles
-    axs['spk'].set_xlabel('Spike count [unitless]')
+    axs['spk'].set_xlabel('Spike count')
     axs['af'].set_xlabel(r'Activation function [$A/m^2$]')
     axs['cb'].set_title('Membrane potential [V]')
 

@@ -9,9 +9,10 @@ import sys
 import os 
 osjoin = os.path.join # an alias for convenience
 
-b2.defaultclock.dt = 10*us
+b2.defaultclock.dt = 5*us
 
-def run_experiment(irk=None, stim_dur=None, biphasic=True, 
+
+def run_experiment(irk=None, stim_dur=None, biphasic_ratio=10., 
                    with_ranv=False):
     
     if type(irk)==type(None):
@@ -32,9 +33,11 @@ def run_experiment(irk=None, stim_dur=None, biphasic=True,
         first_run = True
     else:
         if os.path.exists(osjoin('.', 'results','runtimes.csv')):
-            finished = np.loadtxt('results/runtimes.csv', delimiter=',', ndmin=2)
+            finished = np.loadtxt('results/runtimes.csv', ndmin=2,
+            					  delimiter=',' , dtype=str, encoding='utf-8',
+            					  converters = lambda x: float(x.split(' ')[0]))
             
-    for k in k_sweep:
+    for k in np.roll(k_sweep,-1):
         start = time()
         b2.start_scope()
         
@@ -65,10 +68,15 @@ def run_experiment(irk=None, stim_dur=None, biphasic=True,
         # Let's start all from a relaxed state 
         net = b2.Network(b2.collect())
         net.add(mons)
+        for mon in mons:
+            mon.active=False
         b2.run(3*ms)  # relax the initial condition
         b2.store()
 
         print('Setting up axon took ', str(round(time()-start,2)), 'seconds!') 
+
+        for mon in mons:
+            mon.active=True
 
         for id_r, r_ in enumerate(r_sweep):
             for id_I, I_ in enumerate(I_sweep):
@@ -104,11 +112,11 @@ def run_experiment(irk=None, stim_dur=None, biphasic=True,
                     b2.run(stim_dur) 
                     
                     # counter pulse
-                    if biphasic:
-                        nrn_full.I = -AF_full/10.
+                    if biphasic_ratio:
+                        nrn_full.I = -AF_full/biphasic_ratio
                         if with_ranv:
-                            nrn_ranv.I[nrn_ranv.idx_nr] = -AF_ranv/10.
-                        b2.run(stim_dur*10) # counter pulse
+                            nrn_ranv.I[nrn_ranv.idx_nr] = -AF_ranv/biphasic_ratio
+                        b2.run(stim_dur*biphasic_ratio) # counter pulse
                         
                     # rest
                     nrn_full.I = 0*AF_full
@@ -135,10 +143,12 @@ def run_experiment(irk=None, stim_dur=None, biphasic=True,
                         cond = (mon.t>=2.9*ms) * (mon.t<=4.6*ms) 
                         t = mon.t[cond]/ms
                         v = mon.v[:,cond]/volt
-                        stim_dur_ms = stim_dur/ms
                         name = osjoin('.', 'results',suffix+f'_i{I_str}_r{r_str}_k{k_str}')
                         
-                        plot(t, v, af, nrn, mon, spk, stim_dur_ms, biphasic, suffix, name)
+                        print(f'\tComputation finished after {round(time()-start,2)} seconds')
+                        plot(t, v, r_, af, nrn, mon, spk, stim_dur, biphasic_ratio, suffix, name)
+                        print(f'\tViz finished after {round(time()-start,2)} seconds')
+                        
                         del mon, v, t, spk, nrn
                     
                     runtime = round(time()-start,2)
@@ -146,8 +156,8 @@ def run_experiment(irk=None, stim_dur=None, biphasic=True,
                         with open(osjoin('.', 'results', 'runtimes.csv') ,'a') as file:
                             file.write(','.join([I_str, r_str, k_str, str(runtime)])+'\n')
                     
-                    print('i=', I_str,'r=', r_str, 'k=', k_str, 'finished after',\
-                          runtime, 'seconds')
+                    # print('i=', I_str,'r=', r_str, 'k=', k_str, 'finished after',\
+                    #       runtime, 'seconds')
                 else:
                     print('i=', I_str,'r=', r_str, 'k=', k_str, 'skipped!')
                         
@@ -155,13 +165,13 @@ def run_experiment(irk=None, stim_dur=None, biphasic=True,
 if __name__=='__main__':
     irk = None
     stim_dur = None
-    biphasic = True
+    biphasic_ratio = 10 # set zero to deactivate
     if len(sys.argv)>1:
         irk = {'I': float(sys.argv[1])*mA,
                'r': np.array([0, float(sys.argv[2]), 0])*mm,
                'k': float(sys.argv[3])}
         if len(sys.argv)>4:
             stim_dur = float(sys.argv[4])*us
-            biphasic = bool(eval(sys.argv[5]))
+            biphasic_ratio = float(eval(sys.argv[5]))
             
-    run_experiment(irk = irk, stim_dur = stim_dur, biphasic=biphasic)
+    run_experiment(irk = irk, stim_dur = stim_dur, biphasic_ratio=biphasic_ratio)

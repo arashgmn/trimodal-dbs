@@ -146,10 +146,10 @@ def straight_axon(l, D, N_rep, N_in, N_tran, mode=None):
     d = getd(D)
     L = getL(d)
     
-    if type(mode)==type(None):
-        # we need to modify it to minimize the border artifacts
-        N_tran = 0
-        N_in = int(round(L/l))
+    # if type(mode)==type(None):
+    #     # we need to modify it to minimize the border artifacts
+    #     N_tran = 1
+    #     N_in = int(round(L/l))
     
     rr, n_seg, seg_loc, seg_diams, D_myelin = mesh(l, L, d, D, 
                                                    N_rep, N_in, 
@@ -292,13 +292,14 @@ def curved_axon(x,y,z, l, D, N_in, N_tran=0,
 def setup_neuron(morpho = None, morpho_params=None, 
                  N = None, 
                  point_current=False, 
-                 method='exponential_euler',
+                 method='euler', #exponential_euler
+                 elecphys_params='Astrom',
                   ):
     """
     A high-level function to setup a neuron or an axon.
     """
     
-    namespace= electrophys.params()
+    namespace= electrophys.params(elecphys_params)
     I_unit = 1*amp/meter**2
     
     if type(morpho)!=type(None):
@@ -319,15 +320,15 @@ def setup_neuron(morpho = None, morpho_params=None,
     else:
         assert type(N)==int
         model = electrophys.eqs_group()
-        neuron = b2.NeuronGroup(N=N, model=model, namespace= namespace,
+        neuron = b2.NeuronGroup(N=N, model=model, namespace=namespace,
                                 method=method)
     
     neuron.I = 0*I_unit
     neuron.v = namespace['El']
-    neuron.h = 0 # this is critical since we should have no Na inactivation.
-    neuron.m = 0
-    neuron.n = .25
-    neuron.s = .2 
+    neuron.h_ = 0 # this is critical since we should have no Na inactivation.
+    neuron.m_ = 0
+    neuron.n_ = .25
+    neuron.s_ = .2 
 
     neuron.gKf = namespace['gKf0']
     neuron.gKs = namespace['gKs0']
@@ -379,7 +380,7 @@ def setup_neuron(morpho = None, morpho_params=None,
 def compute_v_ext(r, 
           r_elec,
           I_tot,
-          sigma = 0.3*siemens/meter):
+          sigma = 0.2*siemens/meter):
     """
     computes the extracellular voltage on the given location(s) assuming an
     isotropic an homogeneous medium with the conductivity `sigma` under a 
