@@ -176,7 +176,7 @@ def plot(t, v, r, af, nrn, mon, spk, stim_dur, biphasic_ratio, suffix, name,
 
     # scale bar
     axs['sol'].plot([idx_end*1.2, idx_end*1.2], [amp_axis_loc, amp_axis_loc + amp_scale], color='k', linewidth=3) # scale bar
-    axs['sol'].text(idx_end*1.21, amp_axis_loc, f'{val} A', color='k', rotation=90, fontsize=8, transform=axs['sol'].transData) # scale bar text
+    axs['sol'].text(idx_end*1.22, amp_axis_loc, f'{val} A', color='k', rotation=90, fontsize=8, transform=axs['sol'].transData) # scale bar text
 
     # waveform
     axs['sol'].plot([idx_start, idx_start, idx_counter, idx_counter],

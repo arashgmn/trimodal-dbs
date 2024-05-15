@@ -146,10 +146,10 @@ def straight_axon(l, D, N_rep, N_in, N_tran, mode=None):
     d = getd(D)
     L = getL(d)
     
-    # if type(mode)==type(None):
-    #     # we need to modify it to minimize the border artifacts
-    #     N_tran = 1
-    #     N_in = int(round(L/l))
+    if type(mode)==type(None):
+        # we need to modify it to minimize the border artifacts
+        N_tran = 1
+        N_in = int(round(L/l))
     
     rr, n_seg, seg_loc, seg_diams, D_myelin = mesh(l, L, d, D, 
                                                    N_rep, N_in, 
