@@ -292,8 +292,9 @@ def curved_axon(x,y,z, l, D, N_in, N_tran=0,
 def setup_neuron(morpho = None, morpho_params=None, 
                  N = None, 
                  point_current=False, 
-                 method='euler', #exponential_euler
+                 method='euler', #exponential_
                  elecphys_params='Astrom',
+                 name=None
                   ):
     """
     A high-level function to setup a neuron or an axon.
@@ -315,8 +316,8 @@ def setup_neuron(morpho = None, morpho_params=None,
                                   Ri=namespace['Ri0'], 
                                   method=method, 
                                   refractory="m > 0.75", threshold="m > 0.8",
-                                  reset=''
-                                 )
+                                  reset='',
+                                  )
     else:
         assert type(N)==int
         model = electrophys.eqs_group()
