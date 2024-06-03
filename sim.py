@@ -3,17 +3,17 @@ from vis import *
 from configs import cfg_axon
 from vis import plot
 
-
+import pickle
 from time import time
 import sys
 import os 
 osjoin = os.path.join # an alias for convenience
 
-b2.defaultclock.dt = 5*us
+b2.defaultclock.dt = 10*us
 
 
 def run_experiment(irk=None, stim_dur=None, biphasic_ratio=10., 
-                   with_ranv=False):
+                   with_ranv=True, root= '.'):
     
     if type(irk)==type(None):
         # setting up different cases
@@ -28,14 +28,15 @@ def run_experiment(irk=None, stim_dur=None, biphasic_ratio=10.,
     
     # reading what has been done before: columns: I,r,k,runtime
     # otherwise makes a new file
-    if not os.path.exists(osjoin('.', 'results')):
-        os.makedirs(osjoin('.', 'results'))
+    savepath = osjoin(root,'results')
+    if not os.path.exists(savepath):
+        os.makedirs(savepath)
         first_run = True
-    else:
-        if os.path.exists(osjoin('.', 'results','runtimes.csv')):
-            finished = np.loadtxt('results/runtimes.csv', ndmin=2,
-            					  delimiter=',' , dtype=str, encoding='utf-8',
-            					  converters = lambda x: float(x.split(' ')[0]))
+    # else:
+    #     if os.path.exists(osjoin('.', 'results','runtimes.csv')):
+    #         finished = np.loadtxt('results/runtimes.csv', ndmin=2,
+    #         					  delimiter=',' , dtype=str, encoding='utf-8',
+    #         					  converters = lambda x: float(x.split(' ')[0]))
             
     for k in np.roll(k_sweep,-1):
         start = time()
@@ -57,20 +58,25 @@ def run_experiment(irk=None, stim_dur=None, biphasic_ratio=10.,
         nrn_full = setup_neuron(morpho, morpho_params)
         mon_full = b2.StateMonitor(nrn_full, ['v','m'], record=True)
         spk_full = b2.SpikeMonitor(nrn_full)
-        mons = [mon_full]
         
+        nrns = [nrn_full]
+        mons = [mon_full, spk_full]
         if with_ranv:
             nrn_ranv = setup_neuron(morpho, morpho_params)
             mon_ranv = b2.StateMonitor(nrn_ranv, ['v','m'], record=True)
             spk_ranv = b2.SpikeMonitor(nrn_ranv)
+            
+            nrns = [nrn_ranv]
             mons.append(mon_ranv)
+            mons.append(spk_ranv)
 
         # Let's start all from a relaxed state 
         net = b2.Network(b2.collect())
+        net.add(nrns)
         net.add(mons)
         for mon in mons:
             mon.active=False
-        b2.run(3*ms)  # relax the initial condition
+        net.run(3*ms)  # relax the initial condition
         b2.store()
 
         print('Setting up axon took ', str(round(time()-start,2)), 'seconds!') 
@@ -80,86 +86,142 @@ def run_experiment(irk=None, stim_dur=None, biphasic_ratio=10.,
 
         for id_r, r_ in enumerate(r_sweep):
             for id_I, I_ in enumerate(I_sweep):
-                
-                r_str = str(np.round(r_[1],4))
-                I_str = str(np.round(I_ * 1000 ,2)) # now in mA
+                r_str = str(np.round(r_[1].__float__(), 4)) #SI
+                I_str = str(np.round(I_.__float__() * 1000 ,2)) # now in mA
                 k_str = str(np.round(k,2))
+                name = f'i{I_str}_r{r_str}_k{k_str}'
                 
+                # name = osjoin('.', 'results', )
+                        
                 # except it is just one configuration
-                if type(irk)!=None or first_run: 
-                    skip=False
+                # if type(irk)!=None or first_run: 
+                #     skip=False
                 
-                else:
-                    # we can skip if this is done before
-                    cond_I = finished[:,0] == np.round(I_/(1*mA),2)
-                    cond_r = finished[:,1] == np.round(np.asarray(r_)[1],4) # has no units
-                    cond_k = finished[:,2] == np.round(k,2)
-                    skip = sum(cond_r * cond_I * cond_k)
+                run_full = True
+                if os.path.exists(osjoin(savepath, 'full'+name+'.pkl')):
+                    print(f'{name} full already computed!')
+                    run_full = False
                 
-                if not skip:
-                    print('i=', I_str,'r=', r_str, 'k=', k_str, 'started!')
+                run_ranv = True
+                if os.path.exists(osjoin(savepath, 'ranv'+name+'.pkl')):
+                    print(f'{name} ranv already computed!')
+                    run_ranv = True
+                run_ranv *=  with_ranv # only run ranv if it is not computed before and also if it is requested 
+                
+                    # else:
+                    #     skip = False
+                    # # we can skip if this is done before
+                    # cond_I = finished[:,0] == np.round(I_/(1*mA),2)
+                    # cond_r = finished[:,1] == np.round(np.asarray(r_)[1],4) # has no units
+                    # cond_k = finished[:,2] == np.round(k,2)
+                    # skip = sum(cond_r * cond_I * cond_k)
+                
+                # we need to computed them for visualization
+                af_full = compute_af(nrn_full, r_elec = r_, I_tot = I_, only_ranvier=False)
+                af_ranv = compute_af(nrn_ranv, r_elec = r_, I_tot = I_, only_ranvier=True)
+                
+                if (run_ranv) or (run_full):
+                    print(f'{name} started!')
                     
                     start = time()
                     b2.restore()
-                    AF_full = compute_af(nrn_full, only_ranvier=False,
-                                         r_elec = r_, I_tot = I_)
+                    
+                    # Stimulation
                     
                     # main pulse
-                    nrn_full.I = AF_full
-                    if with_ranv:
-                        AF_ranv = compute_af(nrn_ranv, r_elec = r_, I_tot = I_)
-                        nrn_ranv.I[nrn_ranv.idx_nr] = AF_ranv
-                    b2.run(stim_dur) 
+                    if run_full:
+                        nrn_full.I = af_full
+                    if run_ranv:
+                        nrn_ranv.I[nrn_ranv.idx_nr] = af_ranv
+                    net.run(stim_dur) 
                     
                     # counter pulse
                     if biphasic_ratio:
-                        nrn_full.I = -AF_full/biphasic_ratio
-                        if with_ranv:
-                            nrn_ranv.I[nrn_ranv.idx_nr] = -AF_ranv/biphasic_ratio
-                        b2.run(stim_dur*biphasic_ratio) # counter pulse
+                        if run_full:
+                            nrn_full.I *= -1./biphasic_ratio
+                        if run_ranv:
+                            nrn_ranv.I[nrn_ranv.idx_nr] *= -1/biphasic_ratio
+                        net.run(stim_dur*biphasic_ratio) # counter pulse
                         
                     # rest
-                    nrn_full.I = 0*AF_full
-                    if with_ranv:
-                        nrn_ranv.I[nrn_ranv.idx_nr] = 0*AF_ranv
-                    b2.run(10*ms) # long enough for a full spike traverse nerve
+                    if run_full:
+                        nrn_full.I *= 0
+                    if run_ranv:
+                        nrn_ranv.I[nrn_ranv.idx_nr] *= 0
+                    net.run(10*ms) # long enough for a full spike traverse nerve
                     
+                    print(f'\tComputation finished after {round(time()-start,2)} seconds')
                     
-                    # visualization
-                    suffixs = ['full']
-                    if with_ranv:
-                        suffixs.append('ranv')
+                    # Saving
+                    # start = time()
+                    # for suffix in ['full', 'ranv']:
+                    #     if eval(f'run_{suffix}'):
+                    #         mon = eval('mon_'+suffix)
+                    #         with open(osjoin(savepath, f'{name}_{suffix}_mon.pkl'), 'wb') as f:
+                    #             pickle.dump(mon.get_states(['t', 'v']), f)
+                            
+                    #         spk = eval('spk_'+suffix)
+                    #         with open(osjoin(savepath, f'{name}_{suffix}_spk.pkl'), 'wb') as f:
+                    #             pickle.dump(spk.get_states(['count']), f)
                     
-                    for suffix in suffixs:
-                        nrn = eval('nrn_'+suffix)
-                        mon = eval('mon_'+suffix)
-                        spk = eval('spk_'+suffix)
-                        if suffix == 'ranv': 
-                            af = np.zeros_like(nrn._indices())
-                            af[nrn.idx_nr] = eval('AF_'+suffix)
-                        else:
-                            af = eval('AF_'+suffix)
-
-                        cond = (mon.t>=2.9*ms) * (mon.t<=4.6*ms) 
-                        t = mon.t[cond]/ms
-                        v = mon.v[:,cond]/volt
-                        name = osjoin('.', 'results',suffix+f'_i{I_str}_r{r_str}_k{k_str}')
+                    # print(f'\tSaving took {round(time()-start,2)} seconds')
+                    
+                else:
+                    print(f'{name} already computed! Skipped.')
+                
+                
+                # visualization
+                suffixs = ['full']
+                if with_ranv:
+                    suffixs.append('ranv')
+                    
+                for suffix in suffixs:
+                    start = time()
+                
+                    nrn = eval('nrn_'+suffix)
+                    if suffix == 'ranv': 
+                        _af = np.zeros_like(nrn._indices())
+                        _af[nrn.idx_nr] = eval('af_'+suffix)
+                    else:
+                        _af = eval('af_'+suffix)
+                    
+                    if eval('run_'+suffix):
+                        t = (1*eval(f'mon_{suffix}.t')).__array__() # SI
+                        v = (1*eval(f'mon_{suffix}.v')).__array__() # SI
+                        spk_count = eval(f'spk_{suffix}.count')
+                    else:
+                        _mon = open(f'{name}_{suffix}_mon.pkl', 'rb')
+                        _mon = _mon.read()
+                        _mon = pickle.loads(_mon)
+                        t = _mon['t'] # not SI (quantity)
+                        v = _mon['v'] # not SI (quantity)
                         
-                        print(f'\tComputation finished after {round(time()-start,2)} seconds')
-                        plot(t, v, r_, af, nrn, mon, spk, stim_dur, biphasic_ratio, suffix, name)
-                        print(f'\tViz finished after {round(time()-start,2)} seconds')
+                        _mon = open(f'{name}_{suffix}_spk.pkl', 'rb')
+                        _mon = _mon.read()
+                        spk_count = pickle.loads(_mon)
                         
-                        del mon, v, t, spk, nrn
+                        del _mon
+                        
+                    # t = mon.t[cond] * 1000 # now
+                    # v = mon.v[:,cond]/volt
+                    t -= t[0]                            # SI
+                    v -= nrn.namespace['El'].__array__() # SI
+                    # cond = (t>=2.9*1e-3) * (t<=4.6*1e-3) 
+                    cond = t<=1.6*1e-3
+                    plot(t[cond], v[:,cond], r_, _af, nrn, spk_count, 
+                         stim_dur.__float__(), biphasic_ratio, 
+                         suffix, name, save_root=savepath)
                     
-                    runtime = round(time()-start,2)
-                    if type(irk)==type(None): # only write for grid search
-                        with open(osjoin('.', 'results', 'runtimes.csv') ,'a') as file:
-                            file.write(','.join([I_str, r_str, k_str, str(runtime)])+'\n')
+                    del nrn, _af, v, t, spk_count
+                    print(f'\tViz of {suffix} took {round(time()-start,2)} seconds.')
+                    # runtime = round(time()-start,2)
+                    
+                    # if type(irk)==type(None): # only write for grid search
+                    #     with open(osjoin('.', 'results', 'runtimes.csv') ,'a') as file:
+                    #         file.write(','.join([I_str, r_str, k_str, str(runtime)])+'\n')
                     
                     # print('i=', I_str,'r=', r_str, 'k=', k_str, 'finished after',\
                     #       runtime, 'seconds')
-                else:
-                    print('i=', I_str,'r=', r_str, 'k=', k_str, 'skipped!')
                         
 
 if __name__=='__main__':

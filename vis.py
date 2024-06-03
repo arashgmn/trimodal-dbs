@@ -112,14 +112,16 @@ def add_scalebar(ax, matchx=True, matchy=True, hidex=True, hidey=True, **kwargs)
 
     return sb   
 
-def plot(t, v, r, af, nrn, mon, spk, stim_dur, biphasic_ratio, suffix, name,
-         amp_scale=1300, amp_axis_loc=1500):
+def plot(t, v, r, af, nrn, spk_count, stim_dur, biphasic_ratio, suffix, name,
+         amp_scale=1300, amp_axis_loc=1500, save_root=''):
     
-    dt = mon.t[1] - mon.t[0]
+    dt = t[1] - t[0]
     idx_start = 0# int(round((3-2.9)/0.01))+1
     idx_counter = int(round(stim_dur/dt))
     idx_end = int(round(stim_dur* (1+biphasic_ratio)/dt))
-
+    idx_end_ax = int(round(stim_dur* (1+(max(10,biphasic_ratio)))/dt))
+    idx_end_ax = min(idx_end_ax, .8*len(t))
+           
     fig, axs = plt.subplot_mosaic([['geo', 'cb', '.'], ['af', 'sol','spk']],
                     figsize=(9,5), 
                     gridspec_kw={'width_ratios':[0.25, 1.0,.1],
@@ -149,8 +151,8 @@ def plot(t, v, r, af, nrn, mon, spk, stim_dur, biphasic_ratio, suffix, name,
     
     
     # sol
-    sol = axs['sol'].imshow(v.__array__(), 
-                            vmin=-0.3-.083, vmax=0.3-.083, cmap='bwr', 
+    sol = axs['sol'].imshow(v.__array__()*1000, #mV 
+                            vmin=-200, vmax=200, cmap='bwr', 
                             aspect='auto', origin='lower', )
 
     # cb
@@ -167,16 +169,25 @@ def plot(t, v, r, af, nrn, mon, spk, stim_dur, biphasic_ratio, suffix, name,
     # psuedo axis for wavefrom:
     # we scale the amplitdue of the pulse such that it maxes at
     # 10. The amp=0 axis is fixed at y=1000
-    sign = np.sign(float(name.split('_i')[1].split(' A')[0]))
-    val = np.abs(float(name.split('_i')[1].split(' A')[0]))
+    # set_trace()
 
-    # axis
-    axs['sol'].plot([idx_start, idx_end*1.15], [amp_axis_loc, amp_axis_loc], color='k', linewidth=0.5) # pseudo x-axis
+    # sign = np.sign(float(name.split('_')[0][1:]))
+    # val = np.abs(float(name.split('_')[0][1:])) #in mA
+    sign = np.sign(float(name.split('_')[0][1:].split(' ')[0]))
+    val = np.abs(float(name.split('_')[0][1:].split(' ')[0])) #in mA
+
+    # wavefrom axis 
+    axs['sol'].plot([idx_start, idx_end_ax*1.15], [amp_axis_loc, amp_axis_loc], color='k', linewidth=0.5) # pseudo x-axis
     # axs['sol'].plot([idx_start, idx_start],[amp_axis_loc, amp_axis_loc+amp_scale*1.5], color='k', linewidth=0.5)
 
     # scale bar
-    axs['sol'].plot([idx_end*1.2, idx_end*1.2], [amp_axis_loc, amp_axis_loc + amp_scale], color='k', linewidth=3) # scale bar
-    axs['sol'].text(idx_end*1.22, amp_axis_loc, f'{val} mA', color='k', rotation=90, fontsize=8, transform=axs['sol'].transData) # scale bar text
+    axs['sol'].plot([idx_end_ax*1.2, idx_end_ax*1.2], 
+                    [amp_axis_loc, amp_axis_loc + amp_scale], 
+                    color='k', linewidth=3) # scale bar
+    
+    axs['sol'].text(idx_end_ax*1.22, amp_axis_loc, f'{val:.2f} mA', 
+                    color='k', rotation=90, fontsize=8, 
+                    transform=axs['sol'].transData) # scale bar text
 
     # waveform
     axs['sol'].plot([idx_start, idx_start, idx_counter, idx_counter],
@@ -226,7 +237,7 @@ def plot(t, v, r, af, nrn, mon, spk, stim_dur, biphasic_ratio, suffix, name,
     axs['af'].plot(af, nrn._indices(), label='primary', color='green')
 
     # spikes
-    axs['spk'].plot(spk.count, nrn._indices())
+    axs['spk'].plot(spk_count, nrn._indices())
     
     # biphasic plots
     if biphasic_ratio:
@@ -260,7 +271,7 @@ def plot(t, v, r, af, nrn, mon, spk, stim_dur, biphasic_ratio, suffix, name,
         axs['af'].yaxis.get_ticklabels())
      ]
     
-    axs['af'].set_ylabel('segment index')
+    axs['af'].set_ylabel('Segment index')
 
     # x-axis
     if suffix=='full':
@@ -281,18 +292,18 @@ def plot(t, v, r, af, nrn, mon, spk, stim_dur, biphasic_ratio, suffix, name,
     # axs['sol'].set_xticklabels(ticks_labels)
     
     tidx = np.linspace(0, len(t) - 1, 17, dtype=int)
-    axs['sol'].set_xticks(tidx, np.round(t.__array__(), 2)[tidx])
+    axs['sol'].set_xticks(tidx, np.round(t.__array__()*1000, 1)[tidx])
     # axs['sol'].set_xticklabels(ticks_labels)
     axs['sol'].set_xlabel('Time [ms]')
 
     # titles
     axs['spk'].set_xlabel('Spike count')
-    axs['af'].set_xlabel(r'Activation function [$A/m^2$]')
-    axs['cb'].set_title('Membrane potential [V]')
+    axs['af'].set_xlabel(r'Activation function [$\mathrm{A/m^2}$]')
+    axs['cb'].set_title(r'V - V$_\mathrm{rest}$ [mV]')
 
     # legend
     axs['af'].legend(loc=3)
     plt.tight_layout()
-    plt.savefig(name+'.png', dpi=200,
+    plt.savefig(save_root +'/'+ name+'_'+suffix+'.png', dpi=200,
                 bbox_inches='tight')
-    plt.close()
+    plt.close('all')
