@@ -3,6 +3,17 @@ from brian2.units.constants import faraday_constant as F
 from brian2.units.constants import gas_constant as R
 
 def eqs_spatial():
+    """
+    Creates spatial equations model for neuron membrane dynamics.
+
+    Returns
+    -------
+    str
+        String containing differential equations for:
+        - Ionic currents (i_ion): leak (i_L), slow K+ (i_Ks), fast K+ (i_Kf), Na+ (i_Na)
+        - Gating variables: s, n, m, h
+        - Membrane current (Im)
+    """
     model='''
 # The same equations for the whole neuron, but possibly different parameter values
 # distributed transmembrane current
@@ -44,6 +55,15 @@ I : amp/meter**2
     return model
     
 def eqs_spatial_point():
+    """
+    Creates equations model for point current stimulation.
+
+    Returns
+    -------
+    str
+        Modified spatial equations with point current I instead of distributed current.
+        Removes spatial Im equation and adds point current version.
+    """
     model = eqs_spatial()
     model = ''.join(model.split('Im =')[0])
     model +='''
@@ -53,6 +73,15 @@ I: amp (point current)
     return model
 
 def eqs_group():
+    """
+    Creates equations model for neuron groups.
+
+    Returns
+    -------
+    str
+        Spatial equations extended with voltage dynamics (dv/dt) for neuron groups.
+        Adds membrane capacitance parameter.
+    """
     model= eqs_spatial()
     model+='''
 dv/dt = Im/Cm : volt
@@ -61,6 +90,26 @@ Cm: farad/meter**2
     return model
     
 def params(ref='Astrom'):
+    """
+    Defines electrophysiological parameters for the neuron model.
+
+    Parameters
+    ----------
+    ref : str, default='Astrom'
+        Reference parameter set to use. Options:
+        - 'Astrom': Default parameter set
+        - 'Schwartz': Alternative parameter set with different Na+ dynamics
+
+    Returns
+    -------
+    dict
+        Dictionary containing:
+        - Membrane properties (gl, gK, Cm, etc.)
+        - Ionic concentrations (Na_in, Na_out)
+        - Temperature factors (Q10)
+        - Physical constants (R, F)
+        - Geometric parameters (th_lam)
+    """
     
     namespace = dict(
         # lamella thickness

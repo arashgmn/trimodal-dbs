@@ -8,63 +8,86 @@ from configs import cfg_sim
 import electrophys
 
 
+
 def getd(D):
     """
-    The relationship between inner and outer diamter (both in um) according to
+    The relationship between the inner and outer diameter (both in um) according to
     Astrom.
+    
+    Args:
+        D (float): The outer diameter in um.
+    
+    Returns:
+        float: The inner diameter in um.
     """
     return D*0.74*(1-np.exp(-D/1.15))
 
 
 def getL(d):
     """
-    The relationship between the internodal length and the inner diamter 
+    The relationship between the internodal length and the inner diameter 
     (both in um) according to Astrom.
+    
+    Args:
+        d (float): The inner diameter in um.
+    
+    Returns:
+        float: The internodal length in um.
     """
     return 146*d**1.12
     
 
 def mesh(l, L, d, D, N_rep, N_in=1, N_tran=0, mode=None):
     """
-    meshes the axon with progressions of different types. All inputs must be 
-    unitless (not a brian quantity) but expressed in um. The outputs, will be
-    the same (in um but unitless).
-    
-    The length of transition regions (immediately before and 
-    after a node of Ranvier) depends on the `mode`. See below.
-    
-    Note
-    ====
-    Every node of ranvier is always modeled as one segment but internodal 
-    sections are divided to `N_in` segments with equal lengths. While 
-    transition regions are always divided to `N_in` segments whose lengths
-    (possibly) changes progressively depending on the `mode`:
-    
-    - `mode==None`: All segments will have equal of length of `l` (no adaptive
-                    meshing). The transition region is covered with one segment
-                    of length l. Instead of `mode`, one can equivalently set the
-                    number of transition segments to zero. 
-                    
-    - `mode=='smooth'`: adjusts the length of each segments in the transition 
-                        regions such that the length of segment adjacent to a
-                        node of ranvier is `l` and the size of the segment 
-                        adjacent to the internodal section is `L/N_in`. Thus,
-                        prevents abrupt change in the descretization sizes, but
-                        the length of region will depend on the `N_rep`.
-    
-    - `mode=='constant'`: adjusts the length of each segments in the transition
-                          regions such that total lengh of a transition region 
-                          is `L/N_in` (i.e., equal to the segments in internodal
-                          section, although any other value can work as well), 
-                          while keeping fixing the length of the segments 
-                          adjacent to a node of Ranvier equal to `l` (like 
-                          `smooth`). This may cause abrupt change in segment 
-                          sizes near the internodal segments. For bad inputs, 
-                          segments will be of equal size (and violate the 
-                          assumption of constant total length). 
+    Creates a mesh for axon discretization with different segment progression types.
 
-    - `mode=='equal`: all the transition segments will have equal lengths, but 
-                      possibly different from other regions. 
+    Parameters
+    ----------
+    l : float
+        Length of node of Ranvier segments in um (unitless)
+    L : float
+        Length of internodal sections in um (unitless)
+    d : float
+        Inner diameter in um (unitless)
+    D : float
+        Outer diameter in um (unitless)
+    N_rep : int
+        Number of repetitions of the node-internode pattern
+    N_in : int, default=1
+        Number of segments per internodal section
+    N_tran : int, default=0
+        Number of segments in transition regions
+    mode : {'smooth', 'constant', 'equal', None}, default=None
+        Meshing mode for transition regions:
+        - 'smooth': Adjusts segment lengths in transition regions for gradual 
+          change from l (near node) to L/N_in (near internode). Prevents abrupt 
+          size changes but transition length depends on N_rep.
+        - 'constant': Sets total transition region length to L/N_in while 
+          maintaining l-sized segments near nodes. May cause abrupt size changes 
+          near internodal segments. Falls back to equal sizes if inputs are invalid.
+        - 'equal': Uses equal-length segments throughout transition region, 
+          possibly different from other regions.
+        - None: Disables transition regions (sets N_tran to 0). Uses one segment 
+          of length l for transition coverage.
+
+    Returns
+    -------
+    tuple
+        - rr (int): Ranvier-to-Ranvier index difference
+        - n_seg (int): Total number of segments
+        - seg_loc (ndarray): Segment border locations
+        - seg_diams (ndarray): Segment diameters
+        - D_myelin (ndarray): Outer diameters including myelin
+
+    Notes
+    -----
+    Every node of Ranvier is modeled as one segment. Internodal sections are 
+    divided into N_in equal-length segments. Transition regions are divided 
+    into N_tran segments with lengths determined by the selected mode.
+
+    For adaptive meshing (modes other than None), N_tran must be >= 2.
+    
+    (unitless) means the provided argument should not be a Brian quantity.
     """
     
     if type(mode)==type(None):
@@ -133,13 +156,42 @@ def mesh(l, L, d, D, N_rep, N_in=1, N_tran=0, mode=None):
 
 def straight_axon(l, D, N_rep, N_in, N_tran, mode=None):
     """
-    D is only used to estimate the for
+    Creates a straight axon with specified morphological parameters.
+
+    Parameters
+    ----------
+    l : float
+        Length of node of Ranvier segments in um
+    D : float
+        Outer diameter in um
+    N_rep : int
+        Number of repetitions of the node-internode pattern
+    N_in : int
+        Number of segments per internodal section
+    N_tran : int
+        Number of segments in transition regions
+    mode : {'smooth', 'constant', 'equal', None}, default=None
+        Meshing mode for transition regions
+
     Returns
-    =======
-    morpho : The morphology of the axon
-    Nrr    : Ranvier-to-Ranvier index difference (thus rr)
-    nn     : INternode index (thus nn)
-    nr     : Nodes of Ranvier index (thus nr)
+    -------
+    tuple
+        - morpho : brian2.Section
+            Morphology object representing the axon
+        - morpho_params : dict
+            Dictionary containing:
+            - d : Quantity
+                Inner diameter
+            - D : Quantity
+                Outer diameter
+            - D_myelin : Quantity
+                Myelin diameter distribution
+            - rr : int
+                Ranvier-to-Ranvier index difference
+            - idx_nn : array
+                Indices of internodal segments
+            - idx_nr : array
+                Indices of Ranvier nodes
     """
     
     # morphology sizes
@@ -176,9 +228,29 @@ def straight_axon(l, D, N_rep, N_in, N_tran, mode=None):
 
 def get_total_length(l, D, N_in, N_tran, N_rep, mode=None):
     """
-    computes the total length of a straight axon with the given 
-    arguments (unitless but in um).
-    """    
+    Computes the total length of a straight axon.
+
+    Parameters
+    ----------
+    l : float
+        Length of node of Ranvier segments in um
+    D : float
+        Outer diameter in um
+    N_in : int
+        Number of segments per internodal section
+    N_tran : int
+        Number of segments in transition regions
+    N_rep : int
+        Number of repetitions of the node-internode pattern
+    mode : {'smooth', 'constant', 'equal', None}, default=None
+        Meshing mode for transition regions
+
+    Returns
+    -------
+    float
+        Total length of the axon in um
+    """
+       
     d = getd(D)
     L = getL(d)
     if type(mode)==type(None):
@@ -297,7 +369,30 @@ def setup_neuron(morpho = None, morpho_params=None,
                  name=None
                   ):
     """
-    A high-level function to setup a neuron or an axon.
+    Creates and initializes a neuron or axon model with specified parameters.
+
+    Parameters
+    ----------
+    morpho : Morphology, optional
+        Brian2 morphology object defining the neuron geometry
+    morpho_params : dict, optional
+        Dictionary of morphological parameters for myelinated segments
+    N : int, optional
+        Number of neurons (for NeuronGroup initialization)
+    point_current : bool, default=False
+        If True, uses point current model
+        If False, uses spatial current distribution
+    method : str, default='euler'
+        Integration method for differential equations
+    elecphys_params : str, default='Astrom'
+        Electrophysiological parameter set to use
+    name : str, optional
+        Name identifier for the neuron
+
+    Returns
+    -------
+    Neuron
+        Brian2 SpatialNeuron or NeuronGroup object with initialized states
     """
     
     namespace= electrophys.params(elecphys_params)
@@ -383,10 +478,25 @@ def compute_v_ext(r,
           I_tot,
           sigma = 0.2*siemens/meter):
     """
-    computes the extracellular voltage on the given location(s) assuming an
-    isotropic an homogeneous medium with the conductivity `sigma` under a 
-    point-wise current injection. 
+    Computes extracellular voltage at given locations assuming point-source current injection.
+
+    Parameters
+    ----------
+    r : array-like
+        Observation point coordinates
+    r_elec : array-like
+        Electrode position coordinates
+    I_tot : Quantity
+        Total injected current
+    sigma : Quantity, default=0.2*siemens/meter
+        Medium conductivity
+
+    Returns
+    -------
+    Quantity
+        Extracellular voltage at observation points
     """
+
     
     # loosing units
     r_ = np.asarray(r)
@@ -397,12 +507,25 @@ def compute_v_ext(r,
     
 def compute_af(neuron, r_elec, I_tot=5*mA, only_ranvier=True):
     """
-    computes the activation function based on the location of the nodes and
-    the axial reistivity. Both must be accessible through the 
-    object `neuron`. On the axon ends no AF is computed.
-    
-    If `only_ranvier=True`, the internodal segments will be ignored and AF is
-    estimated based on the location of nodes of ranvier only.
+    Computes the activation function along an axon based on extracellular potential gradients.
+
+    Parameters
+    ----------
+    neuron : SpatialNeuron
+        A Brian2 SpatialNeuron object containing morphological information
+    r_elec : array-like
+        Electrode position coordinates [x, y, z]
+    I_tot : Quantity, default=5*mA
+        Total stimulation current
+    only_ranvier : bool, default=True
+        If True, computes AF only at nodes of Ranvier
+        If False, computes AF at all compartments
+
+    Returns
+    -------
+    ndarray
+        Activation function values normalized by surface area
+        First and last compartments have AF=0
     """
     
     # all unitless  
@@ -444,9 +567,24 @@ def compute_af(neuron, r_elec, I_tot=5*mA, only_ranvier=True):
     
 def setup_sweeps():
     """
-    Sets the parameters range for sweeping based on the values
-    in the config file (cfg_sim dictionary).
+    Sets up parameter ranges for simulation sweeps based on configuration file.
+
+    Returns
+    -------
+    tuple
+        - I_sweep : Quantity array
+            Stimulation current values
+        - r_sweep : Quantity array
+            2D array of electrode positions
+        - k_sweep : array
+            Curvature parameter values
+
+    Notes
+    -----
+    Parameter ranges are read from cfg_sim dictionary in the config file.
+    Current sweep excludes zero and includes both positive and negative values.
     """
+    
     k_sweep = np.linspace(cfg_sim['k']['start'],
                           cfg_sim['k']['end'],
                           cfg_sim['k']['N'])
@@ -466,3 +604,35 @@ def setup_sweeps():
     r_sweep*= eval(cfg_sim['r']['unit'])
     
     return I_sweep, r_sweep, k_sweep
+
+
+
+def categorize(spk_count):
+    """Categorizes communication mode based on the number spike 
+    observed at the begeinning and the end of the axon. 
+    
+    If no spikes is generated on some compartment but stays localized,
+    the axon is categorzied as "blocking", if only on end recives the
+    spikes it is classified as "unidirectional" and otherwise
+    "bidirectional". 
+    
+    
+    Args:
+        spk_count (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
+    
+    n_start, n_end = spk_count[0], spk_count[-1]
+    if max(spk_count) == 0:
+        return 'none'
+
+    else:
+        if (n_start + n_end) > 0 :
+            if n_start == n_end:
+                return 'bi'
+            else:
+                return 'uni'
+        else:
+            return 'blk'
